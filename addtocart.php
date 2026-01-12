@@ -1,51 +1,53 @@
 <?php
 session_start();
 
-$cookie_name = "sessionid";
-$cookie_value = rand(1000,100000);
-
-//check user log in or not?
-
+/* LOGIN CHECK */
 if (!isset($_SESSION['custname'])) {
-    header('Location: signin.php');
-    exit(); // THIS IS REQUIRED
+    $_SESSION['redirect_after_login'] = $_SERVER['HTTP_REFERER'];
+    header("Location: signin.php");
+    exit;
 }
-//check cookie value found or not? y=go ahead and n= go home page
 
-if(!isset($_COOKIE[$cookie_name])) 
-{
-    //echo "Cookie named '" . $cookie_name . "' is not set!";
-    setcookie($cookie_name, $cookie_value, time() + (86400 * 30), "/");
-}
-else 
-{
-    $cookie_value =  $_COOKIE[$cookie_name];
-}
+/* DB */
 include 'conn.php';
 
-$p1 = $_GET['pid'];
-$p2 = $_GET['pqty'];
-$p3 = $_GET['price1'];
-
-$sql2 = "SELECT * FROM res_addtocart_master WHERE pid='$p1' AND sessionid='$cookie_value'";
-$result2 = $conn->query($sql2);
-
-if ($result2->num_rows > 0) {
-    $row = $result2->fetch_assoc();
-    $p = $row['pquantity'] + 1;
-    $v = $p * $p3;
-
-    $sql4 = "UPDATE res_addtocart_master 
-             SET pquantity='$p', pamout='$v' 
-             WHERE pid='$p1' AND sessionid='$cookie_value'";
-    $conn->query($sql4);
+/* CART SESSION COOKIE */
+if (!isset($_COOKIE['sessionid'])) {
+    $sid = rand(1000, 100000);
+    setcookie("sessionid", $sid, time() + 86400 * 30, "/");
 } else {
-    $v = $p2 * $p3;
-    $sql = "INSERT INTO res_addtocart_master
-            (sessionid, pid, pquantity, pprice1, pamout)
-            VALUES ('$cookie_value','$p1','$p2','$p3','$v')";
-    $conn->query($sql);
+    $sid = $_COOKIE['sessionid'];
 }
-header("location:cart.php");
-$conn->close();
-?>
+
+/* FORM DATA (POST) */
+$pid    = $_POST['pid'];
+$pqty   = $_POST['pqty'];
+$price  = $_POST['price1'];
+
+/* CHECK CART */
+$sql = "SELECT * FROM res_addtocart_master 
+        WHERE pid='$pid' AND sessionid='$sid'";
+$result = $conn->query($sql);
+
+if ($result->num_rows > 0) {
+    $row = $result->fetch_assoc();
+    $newqty = $row['pquantity'] + 1;
+    $amount = $newqty * $price;
+
+    $conn->query(
+        "UPDATE res_addtocart_master 
+         SET pquantity='$newqty', pamout='$amount'
+         WHERE pid='$pid' AND sessionid='$sid'"
+    );
+} else {
+    $amount = $pqty * $price;
+    $conn->query(
+        "INSERT INTO res_addtocart_master
+        (sessionid, pid, pquantity, pprice1, pamout)
+        VALUES ('$sid','$pid','$pqty','$price','$amount')"
+    );
+}
+
+/* REDIRECT */
+header("Location: cart.php");
+exit;

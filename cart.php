@@ -1,8 +1,4 @@
 <?php 
-    if (!isset($_SESSION['custname'])) {
-        header('Location: signin.php');
-        exit(); // THIS IS REQUIRED
-    }
     include 'header.php';
 ?>
 <!DOCTYPE html>

@@ -66,6 +66,5 @@ if(isset($_POST['g-recaptcha-response']))
 			}
 		}
 		}  
-
 $conn->close();
 ?>

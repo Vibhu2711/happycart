@@ -1,91 +1,63 @@
-<?php session_start(); ?>
-
 <?php
-// ----------------------------------------------------------------
-include 'conn.php';
-$cookie_name = "sessionid";
-$cookie_value = rand(1000,100000);
-// ----------------------------------------------------------------
-//check user log in or not?
-if(isset($_SESSION['custname']))
-{
-    //echo $_SESSION['custname']; 
-}
-else
-{
-    header('location:signin.php');
-}
-// ----------------------------------------------------------------
-// ----------------------------------------------------------------
-//check cookie value found or not? y=go ahead and n= go home page
-if(!isset($_COOKIE[$cookie_name])) 
-{
-    header('location:index.php');
-}
-else 
-{
-    $cookie_value = $_COOKIE[$cookie_name];
-}
-// ----------------------------------------------------------------
-// ----------------------------------------------------------------
-//read data from addtocart db of cookie value
-//master entry
-$cmid = $_SESSION['custid'];
-$name = $_SESSION['custname'];
+session_start();
+include 'conn.php';   // conn.php must NOT include header.php
 
-$sql3 = "INSERT INTO res_cart_master(custid, ctamount,custname)VALUES ($cmid,0,'$name')";
-$last_id =0;
-$v="";
-if ($conn->query($sql3) === TRUE) {
-   
-    $last_id = $conn->insert_id;
+// SAFETY CHECK
+if (!isset($_POST['placeorder'])) {
+    header("Location: checkout.php");
+    exit;
 }
-else {
-  echo "Error: " . $sql . "<br>" . $conn->error;
+
+$name    = $_POST['name'];
+$email   = $_POST['email'];
+$contact = $_POST['contact'];
+$address = $_POST['address'];
+$payment = $_POST['payment'];
+
+$sessionid = $_COOKIE['sessionid'] ?? '';
+
+// CALCULATE TOTAL
+$total = 0;
+$cart = mysqli_query($conn,
+    "SELECT * FROM res_addtocart_master WHERE sessionid='$sessionid'"
+);
+
+while ($row = mysqli_fetch_assoc($cart)) {
+    $total += $row['pamout'];
 }
- 
-//detail entry
-$pid = "";
-$pquantity = "";
-$pprice1  = "";
-$pamout = "";
-$mytotal=0;
 
-$sql = "SELECT * FROM res_addtocart_master where sessionid=$cookie_value";
-$result = $conn->query($sql);
+/* ========== CASH ON DELIVERY ========== */
+if ($payment === "COD") {
 
-if ($result->num_rows > 0) 
-{
-    while($row = $result->fetch_assoc()) {
-        $pid=$row["pid"];
-        $pquantity=$row["pquantity"];
-        $pprice1=$row["pprice1"];
-        $pamout=$row["pamout"];
-        $mytotal= $mytotal + $pamout;
+    mysqli_query($conn, "INSERT INTO res_order_master
+    (name,custcontact,custaddress,payment_method,total_amount,status)
+    VALUES
+    ('$custname','$contact','$address','COD','$total','Pending')");
 
-        $sql2 = "INSERT INTO res_cart_details(cartid,pid, pquantity, pprice1, pamout)VALUES ($last_id, $pid, $pquantity, $pprice1,$pamout)";
+    $order_id = mysqli_insert_id($conn);
 
-        if ($conn->query($sql2) === TRUE) {
-           
-           // header("location:cart.php");
-        }
-        else {
-          echo "Error: " . $sql . "<br>" . $conn->error;
-        }
+    $items = mysqli_query($conn,
+        "SELECT * FROM res_addtocart_master, res_product_master
+         WHERE res_addtocart_master.pid = res_product_master.pid
+         AND sessionid='$sessionid'"
+    );
+
+    while ($p = mysqli_fetch_assoc($items)) {
+        mysqli_query($conn, "INSERT INTO order_items
+        (order_id, product_id, product_name, price, quantity)
+        VALUES
+        ('$order_id','".$p['pid']."','".$p['pname']."','".$p['pprice1']."','".$p['pquantity']."')");
     }
-} 
-else {
-echo "no data available";
+
+    mysqli_query($conn,
+        "DELETE FROM res_addtocart_master WHERE sessionid='$sessionid'"
+    );
+
+    header("Location: order-success.php");
+    exit;
 }
-// ----------------------------------------------------------------
-//update cartm total value
-$sql4 = "UPDATE res_cart_master SET ctamount = $mytotal+10 where cartid = $last_id";
-if ($conn->query($sql4) === TRUE) {          
-    // header("location:cart.php");
- }
- else {
-   echo "Error: " . $sql . "<br>" . $conn->error;
- }
-// ----------------------------------------------------------------
-$conn->close();
-?>
+
+/* ========== UPI / RAZORPAY ========== */
+
+header("Location: order-success2.php");
+exit;
